@@ -13,6 +13,7 @@ from filesysman import (
     get_files_recursive,
     find_files_recursive,
     get_folders,
+    clear_empty_files,
     clear_empty_folders,
 )
 
@@ -427,6 +428,31 @@ def test_get_folders_recursive(tmp_path):
     assert folder2 in folders
     assert subfolder in folders
     assert nested_folder in folders
+
+
+def test_clear_empty_files(tmp_path):
+    (tmp_path / "empty.txt").touch()
+    (tmp_path / "empty.py").touch()
+    (tmp_path / "filled.txt").write_text("Hello")
+
+    subfolder = tmp_path / "subfolder"
+    subfolder.mkdir()
+    (subfolder / "nested_empty.txt").touch()
+    (subfolder / "nested_filled.txt").write_text("Hello")
+
+    clear_empty_files(tmp_path)
+
+    assert not (tmp_path / "empty.txt").exists()
+    assert not (tmp_path / "empty.py").exists()
+    assert (tmp_path / "filled.txt").exists()
+
+    assert (subfolder / "nested_empty.txt").exists()
+    assert (subfolder / "nested_filled.txt").exists()
+
+    clear_empty_files(tmp_path, recursive=True)
+
+    assert not (subfolder / "nested_empty.txt").exists()
+    assert (subfolder / "nested_filled.txt").exists()
 
 
 def test_clear_empty_folders(tmp_path):

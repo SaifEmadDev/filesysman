@@ -15,5 +15,6 @@ from .filesysman import (
     get_files_recursive,
     find_files_recursive,
     get_folders,
+    clear_empty_files,
     clear_empty_folders,
 )

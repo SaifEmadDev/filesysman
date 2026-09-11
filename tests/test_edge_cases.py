@@ -18,6 +18,7 @@ from filesysman import (
     clear_empty_folders,
     rename_by_keyword,
     delete_by_keyword,
+    clear_empty_files,
 )
 
 
@@ -611,3 +612,17 @@ def test_clear_empty_folders_recursive_removes_empty_siblings(tmp_path):
     assert not empty2.exists()
     assert non_empty.exists()
     assert (non_empty / "file.txt").exists()
+
+
+def test_clear_empty_files_with_extension(tmp_path):
+    (tmp_path / "empty.txt").touch()
+    (tmp_path / "empty.py").touch()
+    (tmp_path / "empty.md").touch()
+    (tmp_path / "filled.txt").write_text("Hello")
+
+    clear_empty_files(tmp_path, extension="TXT")
+
+    assert not (tmp_path / "empty.txt").exists()
+    assert (tmp_path / "empty.py").exists()
+    assert (tmp_path / "empty.md").exists()
+    assert (tmp_path / "filled.txt").exists()

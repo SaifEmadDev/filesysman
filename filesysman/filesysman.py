@@ -940,6 +940,46 @@ def get_folders(
     return folders
 
 
+def clear_empty_files(
+    folder_name: str = ".",
+    recursive: bool = False,
+    extension: str | None = None,
+) -> None:
+    """Deletes empty files from the specified folder.
+
+    Files can optionally be filtered by file extension. When recursive is
+    True, empty files inside subfolders are also deleted.
+
+    Args:
+        folder_name: The name or path of the folder to search.
+        recursive: Whether to check files inside subfolders.
+        extension: The file extension used to filter the files.
+    """
+    if extension:
+        extension = (
+            extension.lower()
+            if extension.startswith(".")
+            else f".{extension.lower()}"
+        )
+
+    folder = _Path(folder_name)
+
+    if recursive:
+        for item in folder.rglob(f"*{extension if extension else ''}"):
+            if item.is_file() and item.stat().st_size == 0:
+                item.unlink()
+    else:
+        for item in folder.iterdir():
+            if item.is_file() and item.stat().st_size == 0:
+                if extension:
+                    exten = item.suffix.lower()
+
+                    if extension == exten:
+                        item.unlink()
+                else:
+                    item.unlink()
+
+
 def clear_empty_folders(
     folder_name: str = ".",
     recursive: bool = False,
