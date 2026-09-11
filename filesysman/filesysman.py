@@ -945,7 +945,7 @@ def clear_empty_folders(
     recursive: bool = False,
 ) -> None:
     """Deletes empty folders from the specified folder.
-
+    
     Only folders that are empty when they are checked are deleted. When
     recursive is True, folders inside subfolders are also checked. A folder
     that becomes empty after it has already been checked will not be deleted.

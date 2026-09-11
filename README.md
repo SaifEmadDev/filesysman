@@ -1,4 +1,4 @@
-# files
+# filesysman
 
 A simple Python library for creating, managing, searching, copying, moving, and organizing files and folders.
 
@@ -21,13 +21,13 @@ A simple Python library for creating, managing, searching, copying, moving, and 
 
 Install the package using pip:
 
-    pip install files
+    pip install filesysman
 
 ## Quick Start
 
 ### Working with Files
 
-    from files import File
+    from filesysman import File
 
     file = File("example.txt")
 
@@ -41,7 +41,7 @@ Install the package using pip:
 
 ### Working with Folders
 
-    from files import Folder
+    from filesysman import Folder
 
     folder = Folder("my_folder")
 
@@ -53,7 +53,7 @@ Install the package using pip:
 
 ### Working with Multiple Files
 
-    from files import create_files, get_files
+    from filesysman import create_files, get_files
 
     create_files(
         "file1.txt",
@@ -70,7 +70,7 @@ Install the package using pip:
 
 Search for files containing a specific keyword in their names:
 
-    from files import find_files
+    from filesysman import find_files
 
     files = find_files("report")
 
@@ -79,7 +79,7 @@ Search for files containing a specific keyword in their names:
 
 You can also search recursively through subfolders:
 
-    from files import find_files_recursive
+    from filesysman import find_files_recursive
 
     files = find_files_recursive("report")
 
@@ -90,7 +90,7 @@ You can also search recursively through subfolders:
 
 Files can be organized into folders based on their extensions:
 
-    from files import organize_by_extension
+    from filesysman import organize_by_extension
 
     organize_by_extension()
 
