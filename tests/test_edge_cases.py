@@ -350,20 +350,6 @@ def test_delete_by_keyword_empty_keyword(tmp_path):
     assert (tmp_path / "file2.py").exists()
 
 
-def test_clear_empty_folders_recursive_nested(tmp_path):
-    level1 = tmp_path / "level1"
-    level2 = level1 / "level2"
-    level3 = level2 / "level3"
-
-    level3.mkdir(parents=True)
-
-    clear_empty_folders(tmp_path, recursive=True)
-
-    assert not level3.exists()
-    assert level2.exists()
-    assert level1.exists()
-
-
 def test_files_without_extension(tmp_path):
     (tmp_path / "README").write_text("Hello")
     (tmp_path / "LICENSE").write_text("License")

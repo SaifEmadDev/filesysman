@@ -983,23 +983,40 @@ def clear_empty_files(
 def clear_empty_folders(
     folder_name: str = ".",
     recursive: bool = False,
+    from_deep: bool = True,
 ) -> None:
     """Deletes empty folders from the specified folder.
-    
-    Only folders that are empty when they are checked are deleted. When
-    recursive is True, folders inside subfolders are also checked. A folder
-    that becomes empty after it has already been checked will not be deleted.
+
+    When recursive is True, empty folders inside subfolders are also
+    deleted. If from_deep is True, folders are processed from the
+    deepest level upward, allowing parent folders to be deleted after
+    their empty subfolders are removed.
 
     Args:
         folder_name: The name or path of the folder to search.
         recursive: Whether to check folders inside subfolders.
+        from_deep: Whether to process recursive folders from the
+                   deepest level upward.
     """
     folder = _Path(folder_name)
 
     if recursive:
-        for item in folder.rglob("*"):
-            if item.is_dir() and not any(item.iterdir()):
+        folders = [
+            item
+            for item in folder.rglob("*")
+            if item.is_dir()
+        ]
+
+        if from_deep:
+            folders.sort(
+                key=lambda item: len(item.parts),
+                reverse=True
+            )
+
+        for item in folders:
+            if not any(item.iterdir()):
                 item.rmdir()
+
     else:
         for item in folder.iterdir():
             if item.is_dir() and not any(item.iterdir()):

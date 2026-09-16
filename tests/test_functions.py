@@ -495,3 +495,18 @@ def test_clear_empty_folders_recursive(tmp_path):
     assert not empty2.exists()
     assert non_empty.exists()
     assert (non_empty / "file.txt").exists()
+
+
+def test_clear_empty_folders_from_deep(tmp_path):
+    root = tmp_path / "root"
+    folder_a = root / "A"
+    folder_b = folder_a / "B"
+    folder_c = folder_b / "C"
+
+    folder_c.mkdir(parents=True)
+
+    clear_empty_folders(root, recursive=True, from_deep=True)
+
+    assert not folder_a.exists()
+    assert not folder_b.exists()
+    assert not folder_c.exists()
