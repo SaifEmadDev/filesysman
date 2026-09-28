@@ -1,10 +1,12 @@
 """Utilities for creating, deleting, renaming, searching, copying, moving,
-organizing, and managing files, folders, and collections of files and folders.
+organizing, and managing files and folders, with support for multithreaded
+file operations.
 """
 
 from datetime import datetime as _datetime
 from pathlib import Path as _Path
 import shutil as _shutil
+from concurrent.futures import ThreadPoolExecutor as _ThreadPoolExecutor
 
 
 class File:
@@ -19,8 +21,16 @@ class File:
 
         Args:
             file_path: The path of the file to represent.
+
+        Raises:
+            IsADirectoryError: If the specified path is an existing directory.
         """
         self.__file_path = _Path(file_path)
+
+        if self.__file_path.exists() and self.__file_path.is_dir():
+            raise IsADirectoryError(
+                f"Expected a file, but '{self.__file_path}' is a directory."
+            )
 
     def __str__(self) -> str:
         """Returns the path of the represented file."""
@@ -36,13 +46,14 @@ class File:
         Args:
             folder_name: The name or path of the folder in which to create
                 the file.
-            exist_ok: Whether to ignore an existing file instead of raising
-                an error.
+            exist_ok: Whether to allow the file to already exist.
         """
         folder = _Path(folder_name)
         folder.mkdir(parents=True, exist_ok=True)
+
         file = folder / self.__file_path
         file.touch(exist_ok=exist_ok)
+
         self.__file_path = file
 
     def delete(self, missing_ok: bool = False) -> None:
@@ -61,6 +72,7 @@ class File:
         """
         path = self.__file_path
         new_path = path.rename(path.parent / new_name)
+
         self.__file_path = new_path
 
     def copy(self, destination: str = ".") -> None:
@@ -87,6 +99,7 @@ class File:
         """
         destination = _Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
+
         _shutil.move(self.__file_path, destination)
         self.__file_path = destination / self.name
 
@@ -181,8 +194,16 @@ class Folder:
 
         Args:
             folder_path: The path of the folder to represent.
+
+        Raises:
+            NotADirectoryError: If the specified path is an existing file.
         """
         self.__folder_path = _Path(folder_path)
+
+        if self.__folder_path.exists() and self.__folder_path.is_file():
+            raise NotADirectoryError(
+                f"Expected a directory, but '{self.__folder_path}' is a file."
+            )
 
     def __str__(self) -> str:
         """Returns the path of the represented folder."""
@@ -201,11 +222,11 @@ class Folder:
             folder_name: The name or path of the folder in which to create
                 the folder.
             parents: Whether to create missing parent folders.
-            exist_ok: Whether to ignore an existing folder instead of raising
-                an error.
+            exist_ok: Whether to allow the folder to already exist.
         """
         folder = _Path(folder_name) / self.__folder_path
         folder.mkdir(parents=parents, exist_ok=exist_ok)
+
         self.__folder_path = folder
 
     def delete(self, filled_ok: bool = False) -> None:
@@ -229,6 +250,7 @@ class Folder:
         """
         folder = self.__folder_path
         new_folder = folder.rename(folder.parent / new_name)
+
         self.__folder_path = new_folder
 
     def copy(self, destination: str = ".") -> None:
@@ -260,6 +282,7 @@ class Folder:
         """
         destination = _Path(destination)
         destination.mkdir(parents=True, exist_ok=True)
+
         _shutil.move(self.__folder_path, destination)
         self.__folder_path = destination / self.name
 
@@ -322,9 +345,11 @@ class Folder:
         folder.
         """
         size = 0
+
         for item in self.__folder_path.iterdir():
             if item.is_file():
                 size += item.stat().st_size
+
         return size
 
     @property
@@ -333,9 +358,11 @@ class Folder:
         its subfolders.
         """
         size = 0
+
         for item in self.__folder_path.rglob("*"):
             if item.is_file():
                 size += item.stat().st_size
+
         return size
 
     @property
@@ -350,11 +377,13 @@ def create_files(
     sep: str = " ",
     extension: str = ".txt",
     folder_name: str = ".",
+    max_workers: int = 1,
 ) -> None:
     """Creates multiple numbered files in the current directory or a folder.
 
     The files are named using the specified base name, separator, number,
-    and extension. The extension is normalized to lowercase.
+    and extension. The extension is normalized to lowercase. Multiple files
+    can be created concurrently by increasing the number of worker threads.
 
     Args:
         number: The number of files to create.
@@ -363,23 +392,42 @@ def create_files(
         extension: The file extension.
         folder_name: The name or path of the folder in which to create
             the files.
+        max_workers: The maximum number of worker threads used to create
+            files.
 
     Raises:
-        ValueError: If number is not positive.
+        ValueError: If number or max_workers is less than 1.
     """
-    if number > 0:
-        extension = (
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
-        )
-        folder = _Path(folder_name)
-        folder.mkdir(parents=True, exist_ok=True)
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
 
+    if number <= 0:
+        raise ValueError("The number must be positive!")
+
+    extension = (
+        extension.lower()
+        if extension.startswith(".")
+        else f".{extension.lower()}"
+    )
+
+    folder = _Path(folder_name)
+    folder.mkdir(parents=True, exist_ok=True)
+
+    if max_workers == 1:
         for number in range(1, number + 1):
             (folder / f"{file_name}{sep}{number}{extension}").touch()
     else:
-        raise ValueError("The number must be positive!")
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for number in range(1, number + 1):
+                future = executor.submit(
+                    (folder / f"{file_name}{sep}{number}{extension}").touch
+                )
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def delete_files(
@@ -388,11 +436,13 @@ def delete_files(
     sep: str = " ",
     extension: str = ".txt",
     folder_name: str = ".",
+    max_workers: int = 1,
 ) -> None:
-    """Deletes multiple numbered files from the current directory or a folder.
+    """Deletes multiple numbered files from the specified folder.
 
     The files are identified using the specified base name, separator, number,
-    and extension. The extension is normalized to lowercase.
+    and extension. The extension is normalized to lowercase. Multiple files
+    can be deleted concurrently by increasing the number of worker threads.
 
     Args:
         number: The number of files to delete.
@@ -400,24 +450,44 @@ def delete_files(
         sep: The separator placed between the file name and number.
         extension: The file extension.
         folder_name: The name or path of the folder containing the files.
+        max_workers: The maximum number of worker threads used to delete files.
 
     Raises:
-        ValueError: If number is not positive.
+        ValueError: If number or max_workers is less than 1.
     """
-    if number > 0:
-        extension = (
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
-        )
-        folder = _Path(folder_name)
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
 
-        for number in range(1, number + 1):
-            (folder / f"{file_name}{sep}{number}{extension}").unlink(
-                missing_ok=True
-            )
-    else:
+    if number <= 0:
         raise ValueError("The number must be positive!")
+
+    extension = (
+        extension.lower()
+        if extension.startswith(".")
+        else f".{extension.lower()}"
+    )
+
+    folder = _Path(folder_name)
+
+    if max_workers == 1:
+        for number in range(1, number + 1):
+            path = folder / f"{file_name}{sep}{number}{extension}"
+            path.unlink(missing_ok=True)
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for number in range(1, number + 1):
+                path = folder / f"{file_name}{sep}{number}{extension}"
+
+                future = executor.submit(
+                    path.unlink,
+                    missing_ok=True,
+                )
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def rename_files(
@@ -428,104 +498,108 @@ def rename_files(
     new_sep: str = " ",
     extension: str = ".txt",
     folder_name: str = ".",
+    max_workers: int = 1,
 ) -> None:
     """Renames multiple numbered files while preserving their numbering.
 
     The base name and separator can be changed while the extension is
-    normalized to lowercase.
+    normalized to lowercase. Multiple files can be renamed concurrently
+    by increasing the number of worker threads.
 
     Args:
         number: The number of files to rename.
         old_name: The current base name of the files.
-        new_name: The new base name for the files.
+        new_name: The new base name of the files.
         old_sep: The separator currently used between the file name and number.
         new_sep: The separator to use between the new file name and number.
         extension: The file extension of the files.
         folder_name: The name or path of the folder containing the files.
+        max_workers: The maximum number of worker threads used to rename
+            files.
 
     Raises:
-        ValueError: If number is not positive.
+        ValueError: If number or max_workers is less than 1, or if an old path
+            is equal to its new path.
+        FileExistsError: If a destination file already exists.
     """
-    if number > 0:
-        extension = (
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
-        )
-        folder = _Path(folder_name)
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
 
-        for number in range(1, number + 1):
-            path = folder / f"{old_name}{old_sep}{number}{extension}"
-
-            if path.exists():
-                new_path = folder / (
-                    f"{new_name}{new_sep}{number}{extension}"
-                )
-                path.rename(new_path)
-    else:
+    if number <= 0:
         raise ValueError("The number must be positive!")
+
+    extension = (
+        extension.lower()
+        if extension.startswith(".")
+        else f".{extension.lower()}"
+    )
+
+    folder = _Path(folder_name)
+    rename_tasks = []
+
+    for number in range(1, number + 1):
+        path = folder / f"{old_name}{old_sep}{number}{extension}"
+
+        if path.exists():
+            new_path = folder / f"{new_name}{new_sep}{number}{extension}"
+            rename_tasks.append((path, new_path))
+
+    for old_path, new_path in rename_tasks:
+        if old_path == new_path:
+            raise ValueError("The old path is equal to the new path")
+
+        if new_path.exists():
+            raise FileExistsError("File already exists!")
+
+    if max_workers == 1:
+        for old_path, new_path in rename_tasks:
+            old_path.rename(new_path)
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for old_path, new_path in rename_tasks:
+                future = executor.submit(
+                    old_path.rename,
+                    new_path,
+                )
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def get_files(
     folder_name: str = ".",
+    keyword: str | None = None,
+    recursive: bool = False,
     extension: str | None = None,
 ) -> list[_Path]:
-    """Returns files from the specified folder, optionally filtered by extension.
+    """Returns files matching the specified search criteria.
+
+    Files can be filtered by keyword and file extension. When recursive is
+    True, files inside subfolders are also included in the results. The
+    keyword must not be empty.
 
     Args:
         folder_name: The name or path of the folder to search.
-        extension: The file extension used to filter the results.
-
-    Returns:
-        A list containing the paths of the matching files.
-    """
-    files = []
-    folder = _Path(folder_name)
-
-    if extension:
-        extension = (
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
-        )
-
-        for item in folder.glob(f"*{extension}"):
-            if item.is_file():
-                files.append(item)
-    else:
-        for item in folder.iterdir():
-            if item.is_file():
-                files.append(item)
-
-    return files
-
-
-def find_files(
-    keyword: str,
-    folder_name: str = ".",
-    extension: str | None = None,
-) -> list[_Path]:
-    """Returns files whose names contain a specified keyword.
-
-    Matching can optionally be filtered by file extension. The keyword must
-    not be empty.
-
-    Args:
-        keyword: The keyword to search for in file names.
-        folder_name: The name or path of the folder to search.
-        extension: The file extension used to filter the results.
+        keyword: The keyword to search for in file names. If None, no keyword
+            filtering is applied.
+        recursive: Whether to search inside subfolders.
+        extension: The file extension used to filter the results. If None, no
+            extension filtering is applied.
 
     Returns:
         A list containing the paths of the matching files.
 
     Raises:
-        ValueError: If keyword is empty.
+        ValueError: If keyword is an empty string.
     """
-    if not keyword:
+    if keyword == "":
         raise ValueError("The keyword must not be empty!")
-    files = []
-    folder = _Path(folder_name)
-    keyword = keyword.lower()
+
+    if keyword:
+        keyword = keyword.lower()
 
     if extension:
         extension = (
@@ -534,17 +608,25 @@ def find_files(
             else f".{extension.lower()}"
         )
 
-    for item in folder.iterdir():
-        if item.is_file():
-            name = item.stem.lower()
-            exten = item.suffix.lower()
+    files = []
+    folder = _Path(folder_name)
 
-            if extension:
-                if keyword in name and extension == exten:
+    if extension:
+        items = (
+            folder.rglob(f"*{extension}")
+            if recursive
+            else folder.glob(f"*{extension}")
+        )
+    else:
+        items = folder.rglob("*") if recursive else folder.iterdir()
+
+    for item in items:
+        if item.is_file():
+            if keyword:
+                if keyword in item.stem.lower():
                     files.append(item)
             else:
-                if keyword in name:
-                    files.append(item)
+                files.append(item)
 
     return files
 
@@ -555,12 +637,14 @@ def rename_by_keyword(
     sep: str = " ",
     extension: str | None = None,
     folder_name: str = ".",
+    max_workers: int = 1,
 ) -> None:
     """Renames files whose names contain a specified keyword using sequential
     names.
 
     Original file extensions are preserved, and files can optionally be
-    filtered by extension. The keyword must not be empty.
+    filtered by extension. Multiple files can be renamed concurrently by
+    increasing the number of worker threads. The keyword must not be empty.
 
     Args:
         keyword: The keyword to search for in file names.
@@ -568,10 +652,17 @@ def rename_by_keyword(
         sep: The separator placed between the new file name and number.
         extension: The file extension used to filter matching files.
         folder_name: The name or path of the folder to search.
+        max_workers: The maximum number of worker threads used to rename
+            files.
 
     Raises:
-        ValueError: If keyword is empty.
+        ValueError: If keyword is empty, max_workers is less than 1, or an
+            old path is equal to its new path.
+        FileExistsError: If a destination file already exists.
     """
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+
     if not keyword:
         raise ValueError("The keyword must not be empty!")
 
@@ -586,6 +677,7 @@ def rename_by_keyword(
 
     num = 1
     folder = _Path(folder_name)
+    rename_tasks = []
 
     for item in folder.iterdir():
         if item.is_file():
@@ -594,32 +686,65 @@ def rename_by_keyword(
 
             if extension:
                 if keyword in name and extension == exten:
-                    item.rename(folder / f"{new_name}{sep}{num}{exten}")
+                    new_path = folder / f"{new_name}{sep}{num}{exten}"
+                    rename_tasks.append((item, new_path))
                     num += 1
             else:
                 if keyword in name:
-                    item.rename(folder / f"{new_name}{sep}{num}{exten}")
+                    new_path = folder / f"{new_name}{sep}{num}{exten}"
+                    rename_tasks.append((item, new_path))
                     num += 1
+
+    for old_path, new_path in rename_tasks:
+        if old_path == new_path:
+            raise ValueError("The old path is equal to the new path")
+
+        if new_path.exists():
+            raise FileExistsError("File already exists!")
+
+    if max_workers == 1:
+        for old_path, new_path in rename_tasks:
+            old_path.rename(new_path)
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for old_path, new_path in rename_tasks:
+                future = executor.submit(
+                    old_path.rename,
+                    new_path,
+                )
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def delete_by_keyword(
     keyword: str,
     extension: str | None = None,
     folder_name: str = ".",
+    max_workers: int = 1,
 ) -> None:
     """Deletes files whose names contain a specified keyword.
 
-    Files can optionally be filtered by extension. The keyword must not be
-    empty.
+    Files can optionally be filtered by file extension. The keyword must not
+    be empty. Multiple files can be deleted concurrently by increasing the
+    number of worker threads.
 
     Args:
         keyword: The keyword to search for in file names.
-        extension: The file extension used to filter the files.
+        extension: The file extension used to filter the files. If None, no
+            extension filtering is applied.
         folder_name: The name or path of the folder to search.
+        max_workers: The maximum number of worker threads used to delete files.
 
     Raises:
-        ValueError: If keyword is empty.
+        ValueError: If keyword is empty or max_workers is less than 1.
     """
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+
     if not keyword:
         raise ValueError("The keyword must not be empty!")
 
@@ -633,6 +758,7 @@ def delete_by_keyword(
         )
 
     folder = _Path(folder_name)
+    files = []
 
     for item in folder.iterdir():
         if item.is_file():
@@ -642,22 +768,41 @@ def delete_by_keyword(
                 exten = item.suffix.lower()
 
                 if keyword in name and extension == exten:
-                    item.unlink()
+                    files.append(item)
             else:
                 if keyword in name:
-                    item.unlink()
+                    files.append(item)
+
+    if max_workers == 1:
+        for item in files:
+            item.unlink()
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for item in files:
+                future = executor.submit(item.unlink)
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def get_files_count(
     folder_name: str = ".",
+    recursive: bool = False,
     extension: str | None = None,
 ) -> int:
-    """Returns the number of files in the specified folder, optionally
+    """Returns the number of files in the specified folder.
+
+    Files can optionally be counted recursively inside subfolders and
     filtered by file extension.
 
     Args:
         folder_name: The name or path of the folder to search.
-        extension: The file extension used to filter the results.
+        recursive: Whether to search inside subfolders.
+        extension: The file extension used to filter the results. If None,
+            no extension filtering is applied.
 
     Returns:
         The number of matching files.
@@ -672,15 +817,22 @@ def get_files_count(
     files_count = 0
     folder = _Path(folder_name)
 
-    for item in folder.iterdir():
-        if item.is_file():
-            if extension:
-                exten = item.suffix.lower()
+    if recursive:
+        pattern = f"*{extension}" if extension else "*"
 
-                if extension == exten:
-                    files_count += 1
-            else:
+        for item in folder.rglob(pattern):
+            if item.is_file():
                 files_count += 1
+    else:
+        for item in folder.iterdir():
+            if item.is_file():
+                if extension:
+                    exten = item.suffix.lower()
+
+                    if extension == exten:
+                        files_count += 1
+                else:
+                    files_count += 1
 
     return files_count
 
@@ -689,11 +841,13 @@ def copy_files(
     source_folder: str = ".",
     destination_folder: str = ".",
     extension: str | None = None,
+    max_workers: int = 1,
 ) -> None:
     """Copies files from a source folder to a destination folder.
 
     Existing files in the destination folder are overwritten. Files can
-    optionally be filtered by file extension.
+    optionally be filtered by file extension. Multiple files can be copied
+    concurrently by increasing the number of worker threads.
 
     Args:
         source_folder: The name or path of the folder containing the files
@@ -701,10 +855,15 @@ def copy_files(
         destination_folder: The name or path of the folder to copy the files
             to.
         extension: The file extension used to filter the files to copy.
+        max_workers: The maximum number of worker threads used to copy files.
 
     Raises:
         FileExistsError: If the source and destination folders are the same.
+        ValueError: If max_workers is less than 1.
     """
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+
     if source_folder == destination_folder:
         raise FileExistsError(
             f"'{source_folder}' Folder is the same as "
@@ -722,35 +881,64 @@ def copy_files(
     destination = _Path(destination_folder)
     destination.mkdir(parents=True, exist_ok=True)
 
+    files = []
+
     for item in source.iterdir():
         if item.is_file():
             if extension:
                 exten = item.suffix.lower()
 
                 if extension == exten:
-                    _shutil.copy2(item, destination)
+                    files.append(item)
             else:
-                _shutil.copy2(item, destination)
+                files.append(item)
+
+    if max_workers == 1:
+        for item in files:
+            _shutil.copy2(item, destination)
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for item in files:
+                future = executor.submit(
+                    _shutil.copy2,
+                    item,
+                    destination,
+                )
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def move_files(
     source_folder: str = ".",
     destination_folder: str = ".",
     extension: str | None = None,
+    max_workers: int = 1,
 ) -> None:
     """Moves files from a source folder to a destination folder.
 
-    Files can optionally be filtered by file extension.
+    Files can optionally be filtered by file extension. Multiple files can
+    be moved concurrently by increasing the number of worker threads.
 
     Args:
-        source_folder: The name or path of the source folder.
-        destination_folder: The name or path of the destination folder.
+        source_folder: The name or path of the folder containing the files
+            to move.
+        destination_folder: The name or path of the folder to move the files
+            to.
         extension: The file extension used to filter the files to move.
+        max_workers: The maximum number of worker threads used to move files.
 
     Raises:
         FileExistsError: If the source and destination folders are the same.
+        ValueError: If max_workers is less than 1.
         shutil.Error: If a file cannot be moved to the destination folder.
     """
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+
     if source_folder == destination_folder:
         raise FileExistsError(
             f"'{source_folder}' Folder is the same as "
@@ -768,28 +956,49 @@ def move_files(
     destination = _Path(destination_folder)
     destination.mkdir(parents=True, exist_ok=True)
 
+    files = []
+
     for item in source.iterdir():
         if item.is_file():
             if extension:
                 exten = item.suffix.lower()
 
                 if extension == exten:
-                    _shutil.move(item, destination)
+                    files.append(item)
             else:
-                _shutil.move(item, destination)
+                files.append(item)
+
+    if max_workers == 1:
+        for item in files:
+            _shutil.move(item, destination)
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for item in files:
+                future = executor.submit(
+                    _shutil.move,
+                    item,
+                    destination,
+                )
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def organize_by_extension(
     folder_name: str = ".",
     destination_folder: str | None = None,
     no_extension_folder: str = "No Extension",
+    max_workers: int = 1,
 ) -> None:
     """Organizes files into folders based on their file extensions.
 
     Files with the same extension are moved into the same folder. If a
     destination folder is specified, copies of the files are organized there
-    while the original files remain unchanged. Files without an extension are
-    placed in a folder with the specified name.
+    while the original files remain unchanged. Files without an extension
+    are placed in a folder with the specified name.
 
     Args:
         folder_name: The name or path of the folder containing the files
@@ -799,10 +1008,16 @@ def organize_by_extension(
             in the original folder.
         no_extension_folder: The name of the folder in which to place files
             without an extension.
+        max_workers: The maximum number of worker threads used to organize
+            files.
 
     Raises:
         FileExistsError: If the source and destination folders are the same.
+        ValueError: If max_workers is less than 1.
     """
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+
     if folder_name == destination_folder:
         raise FileExistsError(
             f"'{folder_name}' Folder is the same as "
@@ -810,6 +1025,7 @@ def organize_by_extension(
         )
 
     folder = _Path(folder_name)
+    tasks = []
 
     if destination_folder:
         destination = _Path(destination_folder)
@@ -823,92 +1039,47 @@ def organize_by_extension(
                 if destination_folder:
                     exten_folder = destination / exten.lstrip(".").upper()
                     exten_folder.mkdir(exist_ok=True)
-                    _shutil.copy2(item, exten_folder)
+
+                    tasks.append(
+                        (_shutil.copy2, item, exten_folder)
+                    )
                 else:
                     exten_folder = folder / exten.lstrip(".").upper()
                     exten_folder.mkdir(exist_ok=True)
-                    _shutil.move(item, exten_folder)
+
+                    tasks.append(
+                        (_shutil.move, item, exten_folder)
+                    )
+
             else:
                 if destination_folder:
                     no_exten = destination / no_extension_folder
                     no_exten.mkdir(exist_ok=True)
-                    _shutil.copy2(item, no_exten)
+
+                    tasks.append(
+                        (_shutil.copy2, item, no_exten)
+                    )
                 else:
                     no_exten = folder / no_extension_folder
                     no_exten.mkdir(exist_ok=True)
-                    _shutil.move(item, no_exten)
 
+                    tasks.append(
+                        (_shutil.move, item, no_exten)
+                    )
+    if max_workers == 1:
+        for task in tasks:
+            function, source, destination = task
+            function(source, destination)
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
 
-def get_files_recursive(
-    folder_name: str = ".",
-    extension: str | None = None,
-) -> list[_Path]:
-    """Returns files from the specified folder and its subfolders, optionally
-    filtered by file extension.
+            for task in tasks:
+                future = executor.submit(*task)
+                futures.append(future)
 
-    Args:
-        folder_name: The name or path of the folder to search.
-        extension: The file extension used to filter the results.
-
-    Returns:
-        A list containing the paths of the matching files.
-    """
-    if extension:
-        extension = (
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
-        )
-    files = []
-    folder = _Path(folder_name)
-
-    for item in folder.rglob(f"*{extension if extension else ''}"):
-        if item.is_file():
-            files.append(item)
-
-    return files
-
-
-def find_files_recursive(
-    keyword: str,
-    folder_name: str = ".",
-    extension: str | None = None,
-) -> list[_Path]:
-    """Returns files from the specified folder and its subfolders whose names
-    contain a specified keyword.
-
-    Matching can optionally be filtered by file extension. The keyword must
-    not be empty.
-
-    Args:
-        keyword: The keyword to search for in file names.
-        folder_name: The name or path of the folder to search.
-        extension: The file extension used to filter the results.
-
-    Returns:
-        A list containing the paths of the matching files.
-
-    Raises:
-        ValueError: If keyword is empty.
-    """
-    if not keyword:
-        raise ValueError("The keyword must not be empty!")
-    if extension:
-        extension = (
-            extension.lower()
-            if extension.startswith(".")
-            else f".{extension.lower()}"
-        )
-
-    files = []
-    folder = _Path(folder_name)
-
-    for item in folder.rglob(f"*{extension if extension else ''}"):
-        if item.is_file():
-            if keyword.lower() in item.stem.lower():
-                files.append(item)
-
-    return files
+            for future in futures:
+                future.result()
 
 
 def get_folders(
@@ -920,7 +1091,7 @@ def get_folders(
 
     Args:
         folder_name: The name or path of the folder to search.
-        recursive: Whether to include folders inside subfolders.
+        recursive: Whether to include folders inside all subfolders.
 
     Returns:
         A list containing the paths of the matching folders.
@@ -944,17 +1115,28 @@ def clear_empty_files(
     folder_name: str = ".",
     recursive: bool = False,
     extension: str | None = None,
+    max_workers: int = 1,
 ) -> None:
     """Deletes empty files from the specified folder.
 
     Files can optionally be filtered by file extension. When recursive is
-    True, empty files inside subfolders are also deleted.
+    True, empty files inside subfolders are also deleted. Multiple files
+    can be deleted concurrently by increasing the number of worker threads.
 
     Args:
         folder_name: The name or path of the folder to search.
         recursive: Whether to check files inside subfolders.
-        extension: The file extension used to filter the files.
+        extension: The file extension used to filter the files. If None, no
+            extension filtering is applied.
+        max_workers: The maximum number of worker threads used to delete
+            files.
+
+    Raises:
+        ValueError: If max_workers is less than 1.
     """
+    if max_workers < 1:
+        raise ValueError("max_workers must be at least 1")
+
     if extension:
         extension = (
             extension.lower()
@@ -963,11 +1145,14 @@ def clear_empty_files(
         )
 
     folder = _Path(folder_name)
+    files = []
 
     if recursive:
-        for item in folder.rglob(f"*{extension if extension else ''}"):
+        pattern = f"*{extension}" if extension else "*"
+
+        for item in folder.rglob(pattern):
             if item.is_file() and item.stat().st_size == 0:
-                item.unlink()
+                files.append(item)
     else:
         for item in folder.iterdir():
             if item.is_file() and item.stat().st_size == 0:
@@ -975,9 +1160,23 @@ def clear_empty_files(
                     exten = item.suffix.lower()
 
                     if extension == exten:
-                        item.unlink()
+                        files.append(item)
                 else:
-                    item.unlink()
+                    files.append(item)
+
+    if max_workers == 1:
+        for item in files:
+            item.unlink()
+    else:
+        with _ThreadPoolExecutor(max_workers=max_workers) as executor:
+            futures = []
+
+            for item in files:
+                future = executor.submit(item.unlink)
+                futures.append(future)
+
+            for future in futures:
+                future.result()
 
 
 def clear_empty_folders(
@@ -996,7 +1195,7 @@ def clear_empty_folders(
         folder_name: The name or path of the folder to search.
         recursive: Whether to check folders inside subfolders.
         from_deep: Whether to process recursive folders from the
-                   deepest level upward.
+            deepest level upward.
     """
     folder = _Path(folder_name)
 
@@ -1010,13 +1209,12 @@ def clear_empty_folders(
         if from_deep:
             folders.sort(
                 key=lambda item: len(item.parts),
-                reverse=True
+                reverse=True,
             )
 
         for item in folders:
             if not any(item.iterdir()):
                 item.rmdir()
-
     else:
         for item in folder.iterdir():
             if item.is_dir() and not any(item.iterdir()):

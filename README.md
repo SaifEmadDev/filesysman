@@ -1,6 +1,6 @@
 # filesysman
 
-A simple Python library for creating, managing, searching, copying, moving, and organizing files and folders.
+A lightweight Python library for creating, managing, searching, copying, moving, and organizing files and folders.
 
 ## Features
 
@@ -10,16 +10,20 @@ A simple Python library for creating, managing, searching, copying, moving, and 
 - Copy and move files and folders
 - Search for files by keyword
 - Search recursively through subfolders
-- Find files by extension
+- Filter files by extension
 - Organize files by extension
 - Get information about files and folders
-- Count files
+- Count files with optional recursive and extension filtering
+- Rename or delete files by keyword
+- Find folders
+- Remove empty files
 - Find and remove empty folders
 - Work with multiple files at once
+- Optional multithreading for supported bulk operations
 
 ## Installation
 
-Install the package using pip:
+Install the latest version from PyPI:
 
     pip install filesysman
 
@@ -58,7 +62,7 @@ Install the package using pip:
     create_files(
         "file1.txt",
         "file2.txt",
-        "file3.txt"
+        "file3.txt",
     )
 
     files = get_files()
@@ -68,23 +72,88 @@ Install the package using pip:
 
 ## Searching for Files
 
-Search for files containing a specific keyword in their names:
+get_files() provides a single interface for retrieving files with optional keyword, recursive, and extension filtering.
 
-    from filesysman import find_files
+### Get All Files
 
-    files = find_files("report")
+    from filesysman import get_files
+
+    files = get_files()
+
+    for file in files:
+        print(file)
+
+### Search by Keyword
+
+    files = get_files(keyword="report")
 
     for file in files:
         print(file)
 
-You can also search recursively through subfolders:
+### Search Recursively
 
-    from filesysman import find_files_recursive
-
-    files = find_files_recursive("report")
+    files = get_files(recursive=True)
 
     for file in files:
         print(file)
+
+### Search by Keyword Recursively
+
+    files = get_files(
+        keyword="report",
+        recursive=True,
+    )
+
+    for file in files:
+        print(file)
+
+### Filter by Extension
+
+The extension can be provided with or without the leading dot.
+
+    files = get_files(extension=".py")
+
+Or:
+
+    files = get_files(extension="py")
+
+### Combine Filters
+
+    files = get_files(
+        keyword="report",
+        recursive=True,
+        extension=".pdf",
+    )
+
+    for file in files:
+        print(file)
+
+## Counting Files
+
+Use get_files_count() to count files in a folder.
+
+    from filesysman import get_files_count
+
+    count = get_files_count()
+
+    print(count)
+
+You can also count files recursively:
+
+    count = get_files_count(
+        recursive=True,
+    )
+
+    print(count)
+
+Or filter the count by extension:
+
+    count = get_files_count(
+        recursive=True,
+        extension=".py",
+    )
+
+    print(count)
 
 ## Organizing Files by Extension
 
@@ -96,7 +165,7 @@ Files can be organized into folders based on their extensions:
 
 For example:
 
-    Before:
+### Before
 
     folder/
     ├── photo.jpg
@@ -104,7 +173,7 @@ For example:
     ├── script.py
     └── notes.txt
 
-    After:
+### After
 
     folder/
     ├── JPG/
@@ -134,10 +203,7 @@ For example:
 ### Searching and Retrieving
 
 - get_files()
-- find_files()
 - get_files_count()
-- get_files_recursive()
-- find_files_recursive()
 - get_folders()
 
 ### Organization and Cleanup
@@ -145,11 +211,33 @@ For example:
 - organize_by_extension()
 - rename_by_keyword()
 - delete_by_keyword()
+- clear_empty_files()
 - clear_empty_folders()
+
+## Multithreading
+
+Several bulk file operations support optional multithreading through the max_workers parameter.
+
+For example:
+
+    from filesysman import create_files
+
+    create_files(
+        "file1.txt",
+        "file2.txt",
+        "file3.txt",
+        max_workers=4,
+    )
+
+By default, max_workers=1 is used, which performs the operation sequentially.
 
 ## Requirements
 
 - Python 3.8 or newer
+
+## Version
+
+Current version: **2.0.0**
 
 ## License
 

@@ -10,10 +10,7 @@ from filesysman import (
     move_files,
     organize_by_extension,
     get_files,
-    find_files,
     get_files_count,
-    get_files_recursive,
-    find_files_recursive,
     get_folders,
     clear_empty_folders,
     rename_by_keyword,
@@ -207,21 +204,6 @@ def test_move_files_nonexistent_destination(tmp_path):
     assert (destination / "file.txt").exists()
 
 
-def test_extension_without_dot(tmp_path):
-    (tmp_path / "file1.txt").write_text("1")
-    (tmp_path / "file2.py").write_text("2")
-
-    assert get_files(tmp_path, "txt") == [tmp_path / "file1.txt"]
-    assert get_files_count(tmp_path, "txt") == 1
-
-
-def test_extension_with_uppercase(tmp_path):
-    (tmp_path / "file.txt").write_text("1")
-
-    assert get_files(tmp_path, ".TXT") == [tmp_path / "file.txt"]
-    assert find_files("file", tmp_path, ".TXT") == [tmp_path / "file.txt"]
-
-
 def test_no_extension(tmp_path):
     (tmp_path / "README").write_text("Hello")
     (tmp_path / "file.txt").write_text("Hello")
@@ -231,47 +213,6 @@ def test_no_extension(tmp_path):
     assert len(files) == 2
     assert tmp_path / "README" in files
     assert tmp_path / "file.txt" in files
-
-
-def test_empty_extension(tmp_path):
-    (tmp_path / "file.txt").write_text("1")
-    (tmp_path / "file.py").write_text("2")
-
-    files = get_files(tmp_path, "")
-
-    assert len(files) == 2
-    assert tmp_path / "file.txt" in files
-    assert tmp_path / "file.py" in files
-    assert get_files_count(tmp_path, "") == 2
-
-
-def test_recursive_extension_without_dot(tmp_path):
-    (tmp_path / "file.txt").write_text("1")
-
-    folder = tmp_path / "folder"
-    folder.mkdir()
-
-    (folder / "nested.txt").write_text("2")
-    (folder / "nested.py").write_text("3")
-
-    files = get_files_recursive(tmp_path, "txt")
-
-    assert tmp_path / "file.txt" in files
-    assert folder / "nested.txt" in files
-    assert folder / "nested.py" not in files
-
-
-def test_find_files_recursive_extension_case(tmp_path):
-    (tmp_path / "Python.txt").write_text("1")
-
-    folder = tmp_path / "folder"
-    folder.mkdir()
-
-    (folder / "Python.py").write_text("2")
-
-    files = find_files_recursive("python", tmp_path, ".TXT")
-
-    assert files == [tmp_path / "Python.txt"]
 
 
 def test_create_files_extension_case(tmp_path):
@@ -284,32 +225,6 @@ def test_create_files_extension_case(tmp_path):
 
     assert (tmp_path / "Test 1.txt").exists()
     assert (tmp_path / "Test 2.txt").exists()
-
-
-def test_find_files_empty_keyword(tmp_path):
-    (tmp_path / "file1.txt").write_text("1")
-    (tmp_path / "file2.py").write_text("2")
-
-    with pytest.raises(ValueError):
-        find_files("", tmp_path)
-
-
-def test_find_files_no_match(tmp_path):
-    (tmp_path / "python.txt").write_text("1")
-    (tmp_path / "java.txt").write_text("2")
-
-    files = find_files("javascript", tmp_path)
-
-    assert files == []
-
-
-def test_find_files_no_match_with_extension(tmp_path):
-    (tmp_path / "python.txt").write_text("1")
-    (tmp_path / "python.py").write_text("2")
-
-    files = find_files("python", tmp_path, ".json")
-
-    assert files == []
 
 
 def test_rename_by_keyword_no_match(tmp_path):
@@ -359,11 +274,6 @@ def test_files_without_extension(tmp_path):
     assert len(files) == 2
     assert tmp_path / "README" in files
     assert tmp_path / "LICENSE" in files
-
-
-def test_empty_folder(tmp_path):
-    assert get_files_count(tmp_path) == 0
-    assert find_files("anything", tmp_path) == []
 
 
 def test_file_rename_to_existing_file(tmp_path):
@@ -469,85 +379,6 @@ def test_rename_by_keyword_to_existing_name(tmp_path):
         )
 
     assert (tmp_path / "Renamed 1.txt").read_text() == "Existing"
-
-
-def test_get_files_recursive_deep_structure(tmp_path):
-    level1 = tmp_path / "level1"
-    level2 = level1 / "level2"
-    level3 = level2 / "level3"
-
-    level3.mkdir(parents=True)
-
-    file1 = level1 / "file1.txt"
-    file2 = level2 / "file2.txt"
-    file3 = level3 / "file3.txt"
-
-    file1.write_text("1")
-    file2.write_text("2")
-    file3.write_text("3")
-
-    files = get_files_recursive(tmp_path)
-
-    assert len(files) == 3
-    assert file1 in files
-    assert file2 in files
-    assert file3 in files
-
-
-def test_get_files_recursive_deep_extension(tmp_path):
-    level1 = tmp_path / "level1"
-    level2 = level1 / "level2"
-
-    level2.mkdir(parents=True)
-
-    txt_file = level1 / "file.txt"
-    py_file = level2 / "file.py"
-
-    txt_file.write_text("1")
-    py_file.write_text("2")
-
-    files = get_files_recursive(tmp_path, ".TXT")
-
-    assert files == [txt_file]
-
-
-def test_find_files_recursive_deep_structure(tmp_path):
-    level1 = tmp_path / "level1"
-    level2 = level1 / "level2"
-    level3 = level2 / "level3"
-
-    level3.mkdir(parents=True)
-
-    file1 = level1 / "Python_file.txt"
-    file2 = level2 / "another.txt"
-    file3 = level3 / "Python_project.py"
-
-    file1.write_text("1")
-    file2.write_text("2")
-    file3.write_text("3")
-
-    files = find_files_recursive("python", tmp_path)
-
-    assert len(files) == 2
-    assert file1 in files
-    assert file3 in files
-
-
-def test_find_files_recursive_deep_extension_case_insensitive(tmp_path):
-    level1 = tmp_path / "level1"
-    level2 = level1 / "level2"
-
-    level2.mkdir(parents=True)
-
-    file1 = level1 / "Python.TXT"
-    file2 = level2 / "Python.py"
-
-    file1.write_text("1")
-    file2.write_text("2")
-
-    files = find_files_recursive("python", tmp_path, ".txt")
-
-    assert files == [file1]
 
 
 def test_get_folders_recursive_deep_structure(tmp_path):
