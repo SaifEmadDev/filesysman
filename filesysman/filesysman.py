@@ -111,15 +111,18 @@ class File:
         """Returns whether the represented file is empty."""
         return self.size == 0
 
-    def read(self) -> str:
+    def read(self, encoding: str | None = None) -> str:
         """Returns the text content of the represented file."""
-        return _Path.read_text(self.__file_path)
+        return self.__file_path.read_text(encoding)
 
-    def write(self, text: str) -> None:
+    def write(self,
+              text: str,
+              encoding: str | None = None,
+    ) -> None:
         """Writes text to the represented file, replacing its existing
         content.
         """
-        self.__file_path.write_text(text)
+        self.__file_path.write_text(text, encoding)
 
     def append(self, text: str) -> None:
         """Adds text to the end of the represented file."""
