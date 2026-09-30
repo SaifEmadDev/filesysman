@@ -237,7 +237,7 @@ By default, max_workers=1 is used, which performs the operation sequentially.
 
 ## Version
 
-Current version: **2.0.0**
+Current version: **2.0.1**
 
 ## License
 
